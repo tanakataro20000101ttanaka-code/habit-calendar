@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>習慣カレンダー</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#4a90d9">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="習慣カレンダー">
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="apple-touch-icon" href="icon.png">
+
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      --accent: #4a90d9;
+      --accent-hover: #3a7bc8;
+      --touch-min: 44px;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 480px;
+      margin: 0 auto;
+      padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-left)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-right));
+      background: #f5f5f5;
+      min-height: 100vh;
+      -webkit-tap-highlight-color: transparent;
+    }
+    h1 {
+      font-size: clamp(1.1rem, 4vw, 1.25rem);
+      margin-bottom: 12px;
+      color: #333;
+    }
+    /* 習慣切り替えタブ */
+    .habit-tabs {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 4px 0 12px;
+      margin-bottom: 12px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .habit-tabs::-webkit-scrollbar { display: none; }
+    .habit-tab {
+      flex-shrink: 0;
+      min-height: var(--touch-min);
+      min-width: 80px;
+      padding: 10px 16px;
+      background: white;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      color: #555;
+      white-space: nowrap;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .habit-tab:hover, .habit-tab:active { background: #f0f0f0; }
+    .habit-tab.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+    .habit-tab .count {
+      font-size: 11px;
+      opacity: 0.9;
+      margin-left: 4px;
+    }
+    .habit-tab-wrap {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .habit-tab-wrap[draggable="true"] { cursor: grab; }
+    .habit-tab-wrap.dragging { opacity: 0.55; }
+    .habit-tab-wrap.drop-target {
+      outline: 2px dashed var(--accent);
+      outline-offset: 3px;
+      border-radius: 10px;
+    }
+    .habit-rename-input {
+      flex: 1;
+      width: auto;
+      min-width: 0;
+      border: none;
+      outline: none;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      padding: 0;
+      margin: 0;
+      text-align: center;
+    }
+    .habit-delete-btn {
+      min-width: 28px;
+      min-height: 28px;
+      padding: 4px;
+      background: #fee;
+      border: none;
+      border-radius: 6px;
+      color: #c33;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .habit-delete-btn:hover, .habit-delete-btn:active { background: #fcc; }
+    .habit-delete-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .habit-add-btn {
+      flex-shrink: 0;
+      min-width: var(--touch-min);
+      min-height: var(--touch-min);
+      padding: 0 14px;
+      background: #e8f0fe;
+      border: 2px dashed var(--accent);
+      border-radius: 10px;
+      color: var(--accent);
+      font-size: 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .habit-add-btn:hover, .habit-add-btn:active { background: #d0e0fc; }
+    /* 習慣追加フォーム */
+    .habit-input {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .habit-input input {
+      flex: 1;
+      min-height: var(--touch-min);
+      padding: 12px 16px;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      font-size: 16px;
+    }
+    .habit-input button {
+      min-height: var(--touch-min);
+      min-width: 80px;
+      padding: 12px 18px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 500;
+    }
+    .habit-input button:hover, .habit-input button:active { background: var(--accent-hover); }
+    /* 画面タブ（カレンダー/集計） */
+    .view-tabs {
+      display: flex;
+      margin-bottom: 16px;
+      border-bottom: 2px solid #e0e0e0;
+    }
+    .view-tabs button {
+      flex: 1;
+      min-height: var(--touch-min);
+      padding: 12px 16px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 15px;
+      color: #888;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+    }
+    .view-tabs button:hover { color: #555; }
+    .view-tabs button.active {
+      color: var(--accent);
+      font-weight: 600;
+      border-bottom-color: var(--accent);
+    }
+    .slide { display: none; }
+    .slide.active { display: block; }
+    /* カレンダー */
+    .calendar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      font-weight: 600;
+      font-size: 16px;
+    }
+    .calendar-header button {
+      min-width: var(--touch-min);
+      min-height: var(--touch-min);
+      background: white;
+      border: 1px solid #e0e0e0;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 22px;
+      color: #555;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .calendar-header button:hover, .calendar-header button:active {
+      background: #eee;
+      color: #333;
+    }
+    .weekdays {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      text-align: center;
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 6px;
+    }
+    .days {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 6px;
+    }
+    .day {
+      aspect-ratio: 1;
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(12px, 3.5vw, 15px);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .day.other-month { color: #ccc; }
+    .day.today {
+      border: 2px solid var(--accent);
+      font-weight: 600;
+    }
+    .day.completed {
+      background: var(--accent);
+      color: white;
+    }
+    .day.valid:hover:not(.completed), .day.valid:active:not(.completed) { background: #e8f0fe; }
+    .day.completed:hover, .day.completed:active { background: var(--accent-hover); }
+    .stats {
+      margin-top: 16px;
+      font-size: 15px;
+      color: #666;
+      padding: 12px;
+      background: white;
+      border-radius: 10px;
+    }
+    /* 月別集計・棒グラフ */
+    .stats-list {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .stats-item {
+      padding: 14px 0;
+      border-bottom: 1px solid #eee;
+    }
+    .stats-item:last-child { border-bottom: none; }
+    .stats-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 15px;
+    }
+    .stats-item .count {
+      font-weight: 700;
+      color: var(--accent);
+      font-size: 16px;
+    }
+    .stats-bar-wrap {
+      height: 12px;
+      background: #eee;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .stats-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), #6ba3e8);
+      border-radius: 6px;
+      min-width: 4px;
+      transition: width 0.3s ease;
+    }
+    .stats-empty {
+      text-align: center;
+      color: #888;
+      padding: 48px 20px;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    /* カレンダー下・今月合計 */
+    .stats-row {
+      display: flex;
+      gap: 24px;
+    }
+    .stats-row span { color: #666; font-size: 14px; }
+    .stats-row strong { color: #333; }
+    /* ポップアップ */
+    .popup-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+    .popup {
+      background: white;
+      border-radius: 16px;
+      padding: 28px;
+      width: 100%;
+      max-width: 340px;
+      min-width: 300px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    }
+    .popup-title {
+      font-size: 15px;
+      color: #333;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .popup-fields {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .popup-field {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .popup-field label {
+      font-size: 12px;
+      color: #888;
+    }
+    .popup-field input {
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+    .popup-actions {
+      display: flex;
+      gap: 12px;
+    }
+    .popup-actions button {
+      flex: 1;
+      min-height: var(--touch-min);
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    .popup-cancel { background: #eee; color: #555; }
+    .popup-save { background: var(--accent); color: white; }
+    /* 月別集計タブ */
+    .month-summary {
+      background: white;
+      border-radius: 12px;
+      padding: 24px 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .month-summary-title {
+      font-size: 15px;
+      color: #333;
+      margin-bottom: 16px;
+    }
+    .month-summary-item {
+      padding: 16px 0;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .month-summary-item:last-child { border-bottom: none; }
+    .month-summary-item .val {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    /* ヒストグラム（Chart.js） */
+    .histogram {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .histogram-chart-wrap {
+      position: relative;
+      height: 260px;
+    }
+    .histogram-year-nav {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .histogram-year-nav button {
+      min-width: 36px;
+      min-height: 36px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 18px;
+      cursor: pointer;
+    }
+    .histogram-year-nav button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .histogram-year-nav span { font-size: 15px; font-weight: 600; color: #333; }
+  </style>
+</head>
+<body>
+  <h1>習慣カレンダー</h1>
+  <div class="habit-tabs" id="habitTabs"></div>
+  <div class="habit-input" id="habitInputArea" style="display:none;">
+    <input type="text" id="habitNameInput" placeholder="習慣を入力（例：運動）" maxlength="20">
+    <button type="button" id="addHabitBtn">追加</button>
+  </div>
+  <div class="view-tabs">
+    <button type="button" class="view-tab-btn active" data-view="calendar">カレンダー</button>
+    <button type="button" class="view-tab-btn" data-view="monthly">月別集計</button>
+    <button type="button" class="view-tab-btn" data-view="stats">グラフ</button>
+  </div>
+  <div class="slide active" id="slide-calendar">
+    <div class="calendar-header">
+      <button type="button" id="prevMonth" aria-label="前月">‹</button>
+      <span id="monthYear"></span>
+      <button type="button" id="nextMonth" aria-label="翌月">›</button>
+    </div>
+    <div class="weekdays">
+      <span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span>
+    </div>
+    <div class="days" id="days"></div>
+    <div class="stats" id="stats"></div>
+  </div>
+  <div class="slide" id="slide-monthly">
+    <div class="month-summary" id="monthSummary"></div>
+  </div>
+  <div class="slide" id="slide-stats">
+    <div class="histogram" id="histogram"></div>
+  </div>
+  <div class="popup-overlay" id="popupOverlay" style="display:none;">
+    <div class="popup">
+      <div class="popup-title" id="popupTitle">○月○日</div>
+      <div class="popup-fields">
+        <div class="popup-field">
+          <label>回数（回）</label>
+          <input type="number" id="popupCount" min="0" inputmode="numeric" placeholder="0">
+        </div>
+        <div class="popup-field">
+          <label>時間（分）</label>
+          <input type="number" id="popupMinutes" min="0" inputmode="numeric" placeholder="0">
+        </div>
+      </div>
+      <div class="popup-actions">
+        <button type="button" class="popup-cancel" id="popupCancel">キャンセル</button>
+        <button type="button" class="popup-save" id="popupSave">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'habitCalendar_v3';
+    let currentDate = new Date();
+    let currentHabitId = null;
+    let habits = [];
+    let draggingHabitId = null;
+    let habitSelectTimer = null;
+    let habitSelectTargetId = null;
+    let popupDateKey = null;
+    let graphYear = new Date().getFullYear();
+    let habitChart = null;
+
+    function normalizeRecord(v) {
+      if (v == null) return { count: 0, minutes: 0 };
+      if (typeof v === 'object' && 'count' in v) return { count: +(v.count||0), minutes: +(v.minutes||0) };
+      if (v === true) return { count: 1, minutes: 0 };
+      return { count: 0, minutes: 0 };
+    }
+
+    function migrateChecks(checks) {
+      if (!checks || typeof checks !== 'object') return {};
+      const out = {};
+      for (const k of Object.keys(checks)) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(k)) continue;
+        out[k] = normalizeRecord(checks[k]);
+      }
+      return out;
+    }
+
+    function loadAll() {
+      try {
+        let raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) raw = localStorage.getItem('habitCalendar_v2');
+        if (!raw) {
+          const legacy = localStorage.getItem('habitCalendar');
+          if (legacy) {
+            const data = JSON.parse(legacy);
+            const keys = Object.keys(data).filter(k => !k.includes('-') && k !== '_habit');
+            if (keys.length === 0 && typeof data === 'object') {
+              const dateKeys = Object.keys(data).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k));
+              if (dateKeys.length > 0) {
+                const id = 'h1';
+                const name = localStorage.getItem('habitCalendar_habit') || '習慣';
+                return {
+                  habits: [{ id, name }],
+                  checks: { [id]: migrateChecks(data) }
+                };
+              }
+            }
+          }
+          return { habits: [{ id: 'h1', name: '習慣' }], checks: {} };
+        }
+        const data = JSON.parse(raw);
+        if (data.checks) {
+          for (const id of Object.keys(data.checks)) {
+            data.checks[id] = migrateChecks(data.checks[id]);
+          }
+        }
+        return data;
+      } catch (e) {
+        return { habits: [{ id: 'h1', name: '習慣' }], checks: {} };
+      }
+    }
+
+    function saveAll(data) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }
+
+    function getData() {
+      const all = loadAll();
+      habits = all.habits || [{ id: 'h1', name: '習慣' }];
+      if (!currentHabitId || !habits.find(h => h.id === currentHabitId)) {
+        currentHabitId = habits[0]?.id || 'h1';
+      }
+      return all.checks?.[currentHabitId] || {};
+    }
+
+    function saveChecks(checks) {
+      const all = loadAll();
+      if (!all.checks) all.checks = {};
+      all.checks[currentHabitId] = checks;
+      saveAll(all);
+    }
+
+    function getDateKey(d) {
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    function genId() {
+      return 'h' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, (c) => {
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+        return map[c];
+      });
+    }
+
+    function updateHabitName(id, newName) {
+      const all = loadAll();
+      const habitsArr = all.habits || [];
+      const habit = habitsArr.find(h => h.id === id);
+      if (!habit) return;
+      habit.name = newName;
+      all.habits = habitsArr;
+      saveAll(all);
+    }
+
+    function startRenameHabit(btn) {
+      const habitId = btn.dataset.id;
+      const nameEl = btn.querySelector('.habit-name');
+      if (!nameEl) return;
+      const oldName = nameEl.textContent;
+
+      // 名前編集開始で、単クリック確定処理を中止
+      if (habitSelectTimer) clearTimeout(habitSelectTimer);
+      habitSelectTargetId = null;
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'habit-rename-input';
+      input.maxLength = 20;
+      input.value = oldName;
+      nameEl.replaceWith(input);
+      input.focus();
+      input.select();
+
+      let settled = false;
+      const finish = (shouldSave) => {
+        if (settled) return;
+        settled = true;
+        const newName = input.value.trim().slice(0, 20);
+        if (shouldSave && newName && newName !== oldName) updateHabitName(habitId, newName);
+        updateAll();
+      };
+
+      input.addEventListener('blur', () => finish(true));
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finish(true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          finish(false);
+        }
+      });
+    }
+
+    function reorderHabits(dragId, targetId) {
+      if (!dragId || !targetId || dragId === targetId) return;
+      const all = loadAll();
+      const habitsArr = all.habits || [];
+      const fromIdx = habitsArr.findIndex(h => h.id === dragId);
+      const toIdxBefore = habitsArr.findIndex(h => h.id === targetId);
+      if (fromIdx < 0 || toIdxBefore < 0) return;
+
+      const [item] = habitsArr.splice(fromIdx, 1);
+      const toIdx = habitsArr.findIndex(h => h.id === targetId);
+      habitsArr.splice(toIdx, 0, item);
+      all.habits = habitsArr;
+      saveAll(all);
+      updateAll();
+    }
+
+    function getTotalCount(habitId) {
+      const all = loadAll();
+      const checks = all.checks?.[habitId] || {};
+      let sum = 0;
+      for (const k of Object.keys(checks)) {
+        sum += normalizeRecord(checks[k]).count;
+      }
+      return sum;
+    }
+
+    function getThisMonthTotals(forDate) {
+      const data = getData();
+      const d = forDate || currentDate;
+      const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      let count = 0, minutes = 0;
+      for (const k of Object.keys(data)) {
+        if (!k.startsWith(ym)) continue;
+        const r = normalizeRecord(data[k]);
+        count += r.count;
+        minutes += r.minutes;
+      }
+      return { count, minutes };
+    }
+
+    function updateAll() {
+      renderHabitTabs();
+      render();
+      if (document.getElementById('slide-monthly').classList.contains('active')) renderMonthSummary();
+      if (document.getElementById('slide-stats').classList.contains('active')) renderHistogram();
+    }
+
+    function renderHabitTabs() {
+      const all = loadAll();
+      habits = all.habits || [];
+      const canDelete = habits.length > 1;
+      const container = document.getElementById('habitTabs');
+      container.innerHTML = habits.map(h => {
+        const count = getTotalCount(h.id);
+        const active = h.id === currentHabitId ? ' active' : '';
+        const delTitle = canDelete ? 'この習慣を削除' : '最後の1つは削除できません';
+        return `
+          <div class="habit-tab-wrap" data-id="${h.id}" draggable="${canDelete ? 'true' : 'false'}">
+            <button type="button" class="habit-tab${active}" data-id="${h.id}">
+              <span class="habit-name">${escapeHtml(h.name)}</span>
+              <span class="count">(${count})</span>
+            </button>
+            <button type="button" class="habit-delete-btn" data-id="${h.id}" title="${delTitle}" aria-label="${delTitle}" ${canDelete ? '' : 'disabled'}>×</button>
+          </div>
+        `;
+      }).join('') + '<button type="button" class="habit-add-btn" id="addHabitTab" aria-label="習慣を追加">+</button>';
+
+      container.querySelectorAll('.habit-tab').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          // ダブルクリック時に click が先に発火して描画が崩れるため、
+          // 単クリックだけ少し遅延確定する
+          if (habitSelectTimer) clearTimeout(habitSelectTimer);
+          habitSelectTargetId = btn.dataset.id;
+          habitSelectTimer = setTimeout(() => {
+            currentHabitId = habitSelectTargetId;
+            habitSelectTargetId = null;
+            updateAll();
+          }, 220);
+        });
+        btn.addEventListener('dblclick', (e) => {
+          if (habitSelectTimer) clearTimeout(habitSelectTimer);
+          habitSelectTargetId = null;
+          e.stopPropagation();
+          startRenameHabit(btn);
+        });
+      });
+      container.querySelectorAll('.habit-delete-btn:not([disabled])').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteHabit(btn.dataset.id);
+        });
+      });
+      document.getElementById('addHabitTab').addEventListener('click', () => {
+        document.getElementById('habitInputArea').style.display = 'flex';
+        document.getElementById('habitNameInput').focus();
+      });
+
+      container.querySelectorAll('.habit-tab-wrap').forEach(wrap => {
+        if (!canDelete) return;
+        const id = wrap.dataset.id;
+        wrap.addEventListener('dragstart', (e) => {
+          draggingHabitId = id;
+          wrap.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', id); } catch (_) {}
+        });
+        wrap.addEventListener('dragend', () => {
+          draggingHabitId = null;
+          wrap.classList.remove('dragging');
+          container.querySelectorAll('.habit-tab-wrap.drop-target').forEach(el => el.classList.remove('drop-target'));
+        });
+        wrap.addEventListener('dragover', (e) => {
+          if (!draggingHabitId || draggingHabitId === id) return;
+          e.preventDefault();
+          wrap.classList.add('drop-target');
+        });
+        wrap.addEventListener('dragleave', () => {
+          wrap.classList.remove('drop-target');
+        });
+        wrap.addEventListener('drop', (e) => {
+          e.preventDefault();
+          wrap.classList.remove('drop-target');
+          reorderHabits(draggingHabitId, id);
+          draggingHabitId = null;
+        });
+      });
+    }
+
+    function deleteHabit(id) {
+      const all = loadAll();
+      const habit = (all.habits || []).find(h => h.id === id);
+      if (!habit) return;
+      if ((all.habits || []).length <= 1) {
+        alert('少なくとも1つの習慣が必要です。');
+        return;
+      }
+      if (!confirm(`「${habit.name}」を本当に削除しますか？\n削除した習慣の記録は元に戻せません。`)) return;
+      all.habits = (all.habits || []).filter(h => h.id !== id);
+      if (all.checks) delete all.checks[id];
+      saveAll(all);
+      if (currentHabitId === id) {
+        currentHabitId = (all.habits[0] || {}).id || 'h1';
+      }
+      updateAll();
+    }
+
+    function render() {
+      document.getElementById('monthYear').textContent = currentDate.getFullYear() + '年' + (currentDate.getMonth() + 1) + '月';
+
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const first = new Date(year, month, 1);
+      const last = new Date(year, month + 1, 0);
+      const startPad = first.getDay();
+      const daysInMonth = last.getDate();
+      const prevMonth = month === 0 ? 11 : month - 1;
+      const prevYear = month === 0 ? year - 1 : year;
+      const prevLast = new Date(prevYear, prevMonth + 1, 0).getDate();
+
+      const days = [];
+      for (let i = startPad - 1; i >= 0; i--) {
+        const d = prevLast - i;
+        days.push({ date: d, other: true, key: prevYear + '-' + String(prevMonth + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0') });
+      }
+      for (let d = 1; d <= daysInMonth; d++) {
+        days.push({ date: d, other: false, key: year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0') });
+      }
+      const total = startPad + daysInMonth;
+      const nextCount = total % 7 === 0 ? 0 : 7 - (total % 7);
+      for (let d = 1; d <= nextCount; d++) {
+        days.push({ date: d, other: true, key: (month === 11 ? year + 1 : year) + '-' + String(month === 11 ? 1 : month + 2).padStart(2, '0') + '-' + String(d).padStart(2, '0') });
+      }
+
+      const data = getData();
+      const today = getDateKey(new Date());
+
+      const html = days.map(cell => {
+        const r = normalizeRecord(data[cell.key]);
+        const completed = r.count > 0 || r.minutes > 0 ? ' completed' : '';
+        const isToday = cell.key === today ? ' today' : '';
+        const other = cell.other ? ' other-month' : '';
+        const valid = cell.other ? '' : ' valid';
+        return `<div class="day${other}${completed}${isToday}${valid}" data-key="${cell.key}">${cell.date}</div>`;
+      }).join('');
+
+      document.getElementById('days').innerHTML = html;
+
+      const { count: totalCount, minutes: totalMinutes } = getThisMonthTotals();
+      document.getElementById('stats').innerHTML = `
+        <div class="stats-row">
+          <span>合計回数 <strong>${totalCount}</strong> 回</span>
+          <span>総時間 <strong>${totalMinutes}</strong> 分</span>
+        </div>
+      `;
+    }
+
+    function renderMonthSummary() {
+      const y = currentDate.getFullYear();
+      const m = currentDate.getMonth() + 1;
+      const { count, minutes } = getThisMonthTotals(currentDate);
+      document.getElementById('monthSummary').innerHTML = `
+        <div class="month-summary-title">${y}年${m}月</div>
+        <div class="month-summary-item">
+          <span>合計回数（回）</span>
+          <span class="val">${count}</span>
+        </div>
+        <div class="month-summary-item">
+          <span>総時間（分）</span>
+          <span class="val">${minutes}</span>
+        </div>
+      `;
+    }
+
+    function getMonthlyStats() {
+      const data = getData();
+      const byMonth = {};
+      for (const key of Object.keys(data)) {
+        const r = normalizeRecord(data[key]);
+        if (r.count === 0 && r.minutes === 0) continue;
+        const ym = key.slice(0, 7);
+        if (!byMonth[ym]) byMonth[ym] = { count: 0, minutes: 0 };
+        byMonth[ym].count += r.count;
+        byMonth[ym].minutes += r.minutes;
+      }
+      const items = Object.entries(byMonth)
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([ym, v]) => {
+          const [y, m] = ym.split('-');
+          return { label: y + '年' + parseInt(m, 10) + '月', ...v };
+        });
+      const maxCount = items.length ? Math.max(...items.map(i => i.count), 1) : 1;
+      return items.map(i => ({ ...i, maxCount }));
+    }
+
+    function getByMonthData() {
+      const data = getData();
+      const byMonth = {};
+      for (const key of Object.keys(data)) {
+        const r = normalizeRecord(data[key]);
+        const ym = key.slice(0, 7);
+        if (!byMonth[ym]) byMonth[ym] = { count: 0, minutes: 0 };
+        byMonth[ym].count += r.count;
+        byMonth[ym].minutes += r.minutes;
+      }
+      return byMonth;
+    }
+
+    function getAvailableYears() {
+      const byMonth = getByMonthData();
+      const years = new Set();
+      for (const ym of Object.keys(byMonth)) {
+        const v = byMonth[ym];
+        if (v.count > 0 || v.minutes > 0) years.add(parseInt(ym.slice(0, 4), 10));
+      }
+      const arr = [...years].sort((a, b) => b - a);
+      return arr.length ? arr : [new Date().getFullYear()];
+    }
+
+    function getYearData(year) {
+      const byMonth = getByMonthData();
+      const labels = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+      return labels.map((label, i) => {
+        const m = i + 1;
+        const ym = year + '-' + String(m).padStart(2, '0');
+        const v = byMonth[ym] || { count: 0, minutes: 0 };
+        return { label, count: v.count, minutes: v.minutes };
+      });
+    }
+
+    function renderHistogram() {
+      const years = getAvailableYears();
+      if (!years.includes(graphYear)) graphYear = years[0];
+      const items = getYearData(graphYear);
+      const container = document.getElementById('histogram');
+      const maxCount = Math.max(...items.map(i => i.count), 1);
+      const maxMinutes = Math.max(...items.map(i => i.minutes), 1);
+      const scaleCount = Math.ceil(maxCount * 1.1) || 1;
+      const scaleMinutes = Math.max(10, Math.ceil((maxMinutes * 1.1) / 10) * 10);
+
+      container.innerHTML = `
+        <div class="histogram-year-nav">
+          <button type="button" id="histogramPrevYear" aria-label="前年">‹</button>
+          <span>${graphYear}年</span>
+          <button type="button" id="histogramNextYear" aria-label="翌年">›</button>
+        </div>
+        <div class="histogram-chart-wrap">
+          <canvas id="habitChartCanvas"></canvas>
+        </div>
+      `;
+
+      document.getElementById('histogramPrevYear').addEventListener('click', () => {
+        const idx = years.indexOf(graphYear);
+        if (idx < years.length - 1) { graphYear = years[idx + 1]; renderHistogram(); }
+      });
+      document.getElementById('histogramNextYear').addEventListener('click', () => {
+        const idx = years.indexOf(graphYear);
+        if (idx > 0) { graphYear = years[idx - 1]; renderHistogram(); }
+      });
+
+      const prevBtn = document.getElementById('histogramPrevYear');
+      const nextBtn = document.getElementById('histogramNextYear');
+      prevBtn.disabled = years.indexOf(graphYear) >= years.length - 1;
+      nextBtn.disabled = years.indexOf(graphYear) <= 0;
+
+      if (habitChart) habitChart.destroy();
+      const ctx = document.getElementById('habitChartCanvas').getContext('2d');
+      habitChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: items.map(i => i.label),
+          datasets: [
+            {
+              label: '回数（回）',
+              data: items.map(i => i.count),
+              backgroundColor: 'rgba(74, 144, 217, 0.8)',
+              borderColor: 'rgb(74, 144, 217)',
+              borderWidth: 1,
+              yAxisID: 'y',
+            },
+            {
+              label: '時間（分）',
+              data: items.map(i => i.minutes),
+              backgroundColor: 'rgba(46, 125, 110, 0.8)',
+              borderColor: 'rgb(46, 125, 110)',
+              borderWidth: 1,
+              yAxisID: 'y1',
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: true },
+            tooltip: {
+              callbacks: {
+                title: (tooltipItems) => {
+                  const idx = tooltipItems[0]?.dataIndex;
+                  return idx != null ? `${graphYear}年${items[idx].label}` : '';
+                },
+                label: (ctx) => ctx.datasetIndex === 0 ? `回数: ${ctx.parsed.y}回` : `時間: ${ctx.parsed.y}分`
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false }
+            },
+            y: {
+              type: 'linear',
+              position: 'left',
+              title: { display: true, text: '回数' },
+              min: 0,
+              max: scaleCount,
+              ticks: { stepSize: 1 }
+            },
+            y1: {
+              type: 'linear',
+              position: 'right',
+              title: { display: true, text: '時間（分）' },
+              min: 0,
+              max: scaleMinutes,
+              ticks: { stepSize: 10 },
+              grid: { drawOnChartArea: false }
+            }
+          }
+        }
+      });
+    }
+
+    document.querySelectorAll('.view-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const view = btn.dataset.view;
+        document.querySelectorAll('.view-tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.slide').forEach(s => s.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('slide-' + view).classList.add('active');
+        if (view === 'monthly') renderMonthSummary();
+        if (view === 'stats') renderHistogram();
+      });
+    });
+
+    function openPopup(key) {
+      const [y, m, d] = key.split('-').map(Number);
+      document.getElementById('popupTitle').textContent = `${m}月${d}日`;
+      const data = getData();
+      const r = normalizeRecord(data[key]);
+      document.getElementById('popupCount').value = r.count || '';
+      document.getElementById('popupMinutes').value = r.minutes || '';
+      popupDateKey = key;
+      document.getElementById('popupOverlay').style.display = 'flex';
+      document.getElementById('popupCount').focus();
+    }
+
+    function closePopup() {
+      document.getElementById('popupOverlay').style.display = 'none';
+      popupDateKey = null;
+    }
+
+    function savePopup() {
+      if (!popupDateKey) return;
+      const count = Math.max(0, parseInt(document.getElementById('popupCount').value, 10) || 0);
+      const minutes = Math.max(0, parseInt(document.getElementById('popupMinutes').value, 10) || 0);
+      const data = getData();
+      if (count > 0 || minutes > 0) {
+        data[popupDateKey] = { count, minutes };
+      } else {
+        delete data[popupDateKey];
+      }
+      saveChecks(data);
+      closePopup();
+      updateAll();
+    }
+
+    document.getElementById('popupCancel').addEventListener('click', closePopup);
+    document.getElementById('popupSave').addEventListener('click', savePopup);
+    document.getElementById('popupOverlay').addEventListener('click', e => {
+      if (e.target.id === 'popupOverlay') closePopup();
+    });
+    document.getElementById('popupCount').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('popupMinutes').focus();
+    });
+    document.getElementById('popupMinutes').addEventListener('keydown', e => {
+      if (e.key === 'Enter') savePopup();
+    });
+
+    document.getElementById('days').addEventListener('click', e => {
+      const cell = e.target.closest('.day.valid');
+      if (!cell) return;
+      openPopup(cell.dataset.key);
+    });
+
+    document.getElementById('prevMonth').addEventListener('click', () => {
+      currentDate.setMonth(currentDate.getMonth() - 1);
+      render();
+    });
+
+    document.getElementById('nextMonth').addEventListener('click', () => {
+      currentDate.setMonth(currentDate.getMonth() + 1);
+      render();
+    });
+
+    document.getElementById('addHabitBtn').addEventListener('click', addHabit);
+    document.getElementById('habitNameInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') addHabit();
+    });
+
+    function addHabit() {
+      const val = document.getElementById('habitNameInput').value.trim();
+      if (!val) return;
+      const all = loadAll();
+      if (!all.habits) all.habits = [];
+      const id = genId();
+      all.habits.push({ id, name: val });
+      if (!all.checks) all.checks = {};
+      all.checks[id] = {};
+      saveAll(all);
+      currentHabitId = id;
+      document.getElementById('habitNameInput').value = '';
+      document.getElementById('habitInputArea').style.display = 'none';
+      updateAll();
+    }
+
+    // PWA: service worker 登録（HTTPS もしくはローカル配信が必要）
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => { /* ignore */ });
+      });
+    }
+
+    updateAll();
+  </script>
+</body>
+</html>
